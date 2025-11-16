@@ -1,0 +1,17 @@
+{
+  "timeZone": "Europe/Athens",
+  "dependencies": {
+    "enabledAdvancedServices": [{
+      "userSymbol": "BigQuery",
+      "serviceId": "bigquery",
+      "version": "v2"
+    }]
+  },
+  "webapp": {
+    "access": "DOMAIN",
+    "executeAs": "USER_DEPLOYING"
+  },
+  "exceptionLogging": "STACKDRIVER",
+  "oauthScopes": ["https://www.googleapis.com/auth/script.external_request", "https://www.googleapis.com/auth/bigquery"],
+  "runtimeVersion": "V8"
+}
