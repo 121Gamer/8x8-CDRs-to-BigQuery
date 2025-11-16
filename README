@@ -1,0 +1,122 @@
+# 8x8 → BigQuery Sync (Google Apps Script)
+
+Light-weight, server-less pipeline that pulls **8x8 Call Detail Records (CDRs)** through the Analytics Work API and lands them in **Google BigQuery** – without duplicates – every hour or on-demand.
+
+---
+
+## ✨  What it does
+1. Authenticates with 8x8 (OAuth-client-credentials flow).  
+2. Discovers all PBXes visible to the API key.  
+3. For each PBX, paginates through CDRs (scrollId) for the last **N** days (default = 1).  
+4. Converts timestamps & arrays → BigQuery-friendly format.  
+5. Loads the batch into a **staging** table (`…_staging`).  
+6. Runs a **MERGE** statement (`staging → final`) on `callId` to guarantee idempotency.  
+7. Exposes a **Web-App URL** – hit it manually or schedule it with Google’s trigger builder.
+
+---
+
+## 🏁  Quick start (5 min)
+
+| Step | Where | What |
+|---|---|---|
+| 1 | **Google Cloud** | Enable **BigQuery API** on the project that will host the dataset. |
+| 2 | **BigQuery** | Create dataset `8x8DataSet` and two tables:&lt;br&gt;`8x8CallDetailRecords` (final) & `8x8CallDetailRecords_staging` (scratch).&lt;br&gt;*Schema is auto-created on first load – no DDL needed.* |
+| 3 | **Apps Script** | [Make a copy](https://script.google.com/home/start) of this project. |
+| 4 | **Apps Script → Project Settings** | Check **“Show ‘appsscript.json’ in editor”** → save. |
+| 5 | **Apps Script → Services** | Add **BigQuery API** service. |
+| 6 | **Apps Script → Project Properties** (File → Project properties → Script properties) | Add the three 8x8 credentials:&lt;br&gt;`id` = API username&lt;br&gt;`pwd` = API password&lt;br&gt;`apikey` = Header API key (visible in 8x8 Analytics Work portal) |
+| 7 | **Apps Script → Deploy → New deployment** | Type = **Web app**&lt;br&gt;Execute as: **Me**&lt;br&gt;Who has access: **Anyone within …** (or **Anyone** if you want external cron).&lt;br&gt;Copy the URL – that’s your trigger. |
+| 8 | **Optional** | Add an **hourly trigger** (Edit → Current project’s triggers → Add trigger → function `sync8x8CallRecordsToBigQuery`, time-driven, hour timer). |
+
+Visit the URL once – you should see a plain-text log ending with **SUCCESS**.
+
+---
+
+## ⚙️  Configuration knobs
+All constants live at the top of the file – tweak without touching logic.
+
+| Constant | Default | Purpose |
+|---|---|---|
+| `DAYS_TO_FETCH_FOR_SYNC` | `1` | How many days back to pull each run (max = 31 per 8x8 limit). |
+| `API_PAGE_SIZE` | `500` | Records per scroll page (max = 1000). |
+| `API_TIMEZONE` | `'Europe/Paris'` | Time-zone sent to 8x8 – must match your contract. |
+| `BIGQUERY_*` | `migration-project-8x8.8x8DataSet.8x8CallDetailRecords` | Project / dataset / final table. |
+| `BIGQUERY_STAGING_TABLE_ID` | `…_staging` | Scratch table – truncated every run. |
+
+---
+
+## 🔍  Monitoring & debugging
+* **Apps Script → Executions** – full stack-trace for every run.  
+* **BigQuery → Job History** – inspect LOAD and MERGE jobs.  
+* **Web-App URL** – returns human-readable log (no auth required if deployed as above).  
+* **Logger** – `Logger.getLog()` is printed in the web response; keep `Logger.log()` lines for audit.
+
+---
+
+## 🧪  Manual test
+Inside Apps Script editor run `manuallyFetchAndLogSampleCDRs()` – it fetches **yesterday** for the first PBX and prints one raw + one transformed record to the log.
+
+---
+
+## 📋  BigQuery final table schema
+The MERGE expects the schema below (created automatically on first load):
+
+| Field | Type | Mode |
+|---|---|---|
+| callId | STRING | REQUIRED |
+| sipCallId | STRING | NULLABLE |
+| pbxId | STRING | NULLABLE |
+| startTimeUTC | TIMESTAMP | NULLABLE |
+| connectTimeUTC | TIMESTAMP | NULLABLE |
+| disconnectedTimeUTC | TIMESTAMP | NULLABLE |
+| talkTime | STRING | NULLABLE |
+| talkTimeMS | INTEGER | NULLABLE |
+| callTime | INTEGER | NULLABLE |
+| ringDuration | INTEGER | NULLABLE |
+| waitTime | STRING | NULLABLE |
+| waitTimeMS | INTEGER | NULLABLE |
+| calleeHoldDuration | STRING | NULLABLE |
+| calleeHoldDurationMS | INTEGER | NULLABLE |
+| caller | STRING | NULLABLE |
+| callerId | STRING | NULLABLE |
+| callerName | STRING | NULLABLE |
+| callee | STRING | NULLABLE |
+| calleeName | STRING | NULLABLE |
+| dnis | STRING | NULLABLE |
+| direction | STRING | NULLABLE |
+| missed | STRING | NULLABLE |
+| abandoned | STRING | NULLABLE |
+| answered | STRING | NULLABLE |
+| lastLegDisposition | STRING | NULLABLE |
+| callLegCount | STRING | NULLABLE |
+| callerDisconnectOnHold | STRING | NULLABLE |
+| calleeDisconnectOnHold | STRING | NULLABLE |
+| departments | STRING | NULLABLE *(comma-separated)* |
+| branches | STRING | NULLABLE *(comma-separated)* |
+| startTime | STRING | NULLABLE |
+| connectTime | STRING | NULLABLE |
+| disconnectedTime | STRING | NULLABLE |
+| answeredTime | INTEGER | NULLABLE |
+| abandonedTime | INTEGER | NULLABLE |
+| aaDestination | STRING | NULLABLE |
+
+---
+
+## 🔁  Re-sync or back-fill
+Change `DAYS_TO_FETCH_FOR_SYNC` to the desired look-back window (≤ 31) and run once – MERGE guarantees you will not duplicate rows already in the final table.
+
+---
+
+## 🛡️  Security notes
+* Credentials are stored in **Script Properties** (GCP KMS encrypted at rest).  
+* Web-app executes **as you**, so anyone with the URL can trigger it – restrict domain if needed.  
+* 8x8 token is cached for **(expires_in – 60 s)** to avoid hammering the auth endpoint.
+
+---
+
+## 📄  License
+MIT – feel free to fork and embed in larger GCP workflows.
+
+---
+
+&gt; Made with ☕ by {your-team} – happy syncing!
